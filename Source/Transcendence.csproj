@@ -46,6 +46,11 @@
     <ModRoot>$(MSBuildProjectDirectory)\..</ModRoot>
   </PropertyGroup>
   <Target Name="DeployToGame" AfterTargets="Build">
+    <!-- Workshop'a ilk yüklemeden sonra oyun About/PublishedFileId.txt'yi sadece oyun klasörüne yazar.
+         Repoya geri al: sonraki yüklemeler yeni sayfa açmak yerine aynı Workshop sayfasını günceller. -->
+    <Copy SourceFiles="$(RimWorldDir)\Mods\Transcendence\About\PublishedFileId.txt"
+          DestinationFolder="$(ModRoot)\About"
+          Condition="Exists('$(RimWorldDir)\Mods\Transcendence\About\PublishedFileId.txt') And !Exists('$(ModRoot)\About\PublishedFileId.txt')" />
     <ItemGroup>
       <ModFiles Include="$(ModRoot)\**\*"
                 Exclude="$(ModRoot)\Source\**;$(ModRoot)\.git\**;$(ModRoot)\.vs\**;$(ModRoot)\.idea\**;$(ModRoot)\.gitignore;$(ModRoot)\.gitattributes;$(ModRoot)\README.md" />
