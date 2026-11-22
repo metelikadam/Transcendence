@@ -1,3 +1,4 @@
+<img width="1280" height="720" alt="download" src="https://github.com/user-attachments/assets/01140831-6c2f-4284-849c-9a911d35a80f" />
 # Transcendence: Skills Beyond 20
 
 A RimWorld 1.7 mod that raises the skill cap from 20 to 40.
