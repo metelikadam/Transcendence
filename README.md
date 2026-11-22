@@ -27,6 +27,17 @@ Requirements: .NET 10 SDK and RimWorld 1.7 with the Harmony Workshop mod.
 
 The DLL is written to `1.7/Assemblies/`, and the mod is copied to `<RimWorld>/Mods/Transcendence` automatically.
 
+## Releasing to the Steam Workshop
+Publishing a GitHub Release uploads the mod to the Workshop automatically (`.github/workflows/steam-workshop.yml`).
+
+1. Bump `modVersion` in `About/About.xml`, run `dotnet build -c Release` in `Source/`, then commit and push.
+2. Create a release whose tag matches the version, for example `gh release create v1.0.1 --title "v1.0.1" --notes "What changed"`.
+   The release title and notes become the Workshop change note.
+
+The workflow checks that `About/PublishedFileId.txt` exists, that the tag matches `modVersion`, and that the committed DLL is not older than `Source/`. It uploads only the folders the game loads.
+
+One-time setup: upload once from inside RimWorld and commit `About/PublishedFileId.txt`. Then set the `STEAM_USERNAME` and `STEAM_CONFIG_VDF` secrets in the `steam-workshop` environment. `STEAM_CONFIG_VDF` is the base64 of SteamCMD's `config/config.vdf` after one interactive login. Regenerate it when the upload starts failing at login.
+
 ## Layout
 ```
 About/          About.xml (packageId: metelikadam.Transcendence)

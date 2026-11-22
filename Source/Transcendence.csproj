@@ -53,7 +53,7 @@
           Condition="Exists('$(RimWorldDir)\Mods\Transcendence\About\PublishedFileId.txt') And !Exists('$(ModRoot)\About\PublishedFileId.txt')" />
     <ItemGroup>
       <ModFiles Include="$(ModRoot)\**\*"
-                Exclude="$(ModRoot)\Source\**;$(ModRoot)\.git\**;$(ModRoot)\.vs\**;$(ModRoot)\.idea\**;$(ModRoot)\.gitignore;$(ModRoot)\.gitattributes;$(ModRoot)\README.md" />
+                Exclude="$(ModRoot)\Source\**;$(ModRoot)\.git\**;$(ModRoot)\.github\**;$(ModRoot)\.vs\**;$(ModRoot)\.idea\**;$(ModRoot)\.gitignore;$(ModRoot)\.gitattributes;$(ModRoot)\README.md" />
     </ItemGroup>
     <Copy SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(RimWorldDir)\Mods\Transcendence\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>

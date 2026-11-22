@@ -1,0 +1,166 @@
+# Publishes the mod to the Steam Workshop when a GitHub Release is published.
+#
+# Required (repository environment "steam-workshop"):
+#   secret STEAM_USERNAME    Steam account name that owns the Workshop item
+#   secret STEAM_CONFIG_VDF  base64 of steamcmd's config/config.vdf after one interactive login
+#                            (holds the Steam Guard-approved session; regenerate when login starts failing)
+# Required in the repo:
+#   About/PublishedFileId.txt  written by RimWorld after the first in-game upload
+#
+# Nothing here runs on normal pushes. Only SteamCMD (Valve) sees the Steam credentials.
+
+name: Publish to Steam Workshop
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      change_note:
+        description: "Workshop change note"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: steam-workshop
+  cancel-in-progress: false
+
+env:
+  STEAM_APP_ID: "294100" # RimWorld
+  # Only what the game loads goes to the Workshop (no Source, git, README, CI files).
+  MOD_PATHS: "About 1.7 Common Defs Patches Languages Textures Sounds Assemblies LoadFolders.xml LICENSE"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    name: Verify release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Workshop item id present
+        run: |
+          f=About/PublishedFileId.txt
+          if [ ! -s "$f" ]; then
+            echo "::error file=$f::Missing. Upload the mod once from inside RimWorld, build locally so the file is copied back, then commit it."
+            exit 1
+          fi
+          id=$(tr -d '[:space:]' < "$f")
+          if ! [[ "$id" =~ ^[0-9]+$ ]]; then
+            echo "::error file=$f::Does not contain a numeric Workshop id."
+            exit 1
+          fi
+          echo "Workshop item: https://steamcommunity.com/sharedfiles/filedetails/?id=$id"
+
+      - name: Release tag matches modVersion
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          ver=$(sed -n 's:.*<modVersion[^>]*>\(.*\)</modVersion>.*:\1:p' About/About.xml | head -n1 | tr -d '[:space:]')
+          if [ "${TAG#v}" != "$ver" ]; then
+            echo "::error file=About/About.xml::Release tag '$TAG' does not match modVersion '$ver'. Bump modVersion, rebuild, commit, then tag."
+            exit 1
+          fi
+          echo "Version $ver"
+
+      - name: Compiled DLL is up to date with Source
+        run: |
+          dll=1.7/Assemblies/Transcendence.dll
+          if [ ! -f "$dll" ]; then echo "::error::$dll is missing."; exit 1; fi
+          src_time=$(git log -1 --format=%ct -- Source)
+          dll_time=$(git log -1 --format=%ct -- "$dll")
+          if [ "$dll_time" -lt "$src_time" ]; then
+            echo "::error file=$dll::Source/ was changed after the DLL was last committed. Run 'dotnet build -c Release' in Source/ and commit the DLL."
+            exit 1
+          fi
+
+  deploy:
+    name: Upload to Steam Workshop
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: steam-workshop
+    container:
+      image: steamcmd/steamcmd:ubuntu-22
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage mod files
+        run: |
+          work="$RUNNER_TEMP/workshop"
+          staging="$work/Transcendence"
+          rm -rf "$work" && mkdir -p "$staging"
+          for p in $MOD_PATHS; do
+            if [ -e "$p" ]; then cp -r "$p" "$staging/"; fi
+          done
+          echo "Files to upload:"
+          (cd "$staging" && find . -type f | sort)
+          echo "WORK=$work" >> "$GITHUB_ENV"
+          echo "STAGING=$staging" >> "$GITHUB_ENV"
+
+      - name: Write Workshop manifest
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          MANUAL_NOTE: ${{ inputs.change_note }}
+        run: |
+          id=$(tr -d '[:space:]' < About/PublishedFileId.txt)
+          if [ -n "$RELEASE_TAG" ]; then
+            note="${RELEASE_NAME:-$RELEASE_TAG}"
+            if [ -n "$RELEASE_BODY" ]; then note="$note"$'\n\n'"$RELEASE_BODY"; fi
+          else
+            note="$MANUAL_NOTE"
+          fi
+          # VDF string escaping
+          note=$(printf '%s' "$note" | tr -d '\r' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+          cat > "$WORK/manifest.vdf" <<EOF
+          "workshopitem"
+          {
+            "appid" "$STEAM_APP_ID"
+            "publishedfileid" "$id"
+            "contentfolder" "$STAGING"
+            "changenote" "$note"
+          }
+          EOF
+          cat "$WORK/manifest.vdf"
+
+      - name: Restore Steam login
+        env:
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+        run: |
+          if [ -z "$STEAM_CONFIG_VDF" ]; then echo "::error::Secret STEAM_CONFIG_VDF is not set in the steam-workshop environment."; exit 1; fi
+          mkdir -p "$HOME/Steam/config"
+          printf '%s' "$STEAM_CONFIG_VDF" | base64 -d > "$HOME/Steam/config/config.vdf"
+          chmod 600 "$HOME/Steam/config/config.vdf"
+
+      - name: Upload
+        env:
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+        run: |
+          if [ -z "$STEAM_USERNAME" ]; then echo "::error::Secret STEAM_USERNAME is not set in the steam-workshop environment."; exit 1; fi
+          set +e
+          steamcmd +login "$STEAM_USERNAME" +workshop_build_item "$WORK/manifest.vdf" +quit < /dev/null 2>&1 | tee "$WORK/steamcmd.log"
+          code=${PIPESTATUS[0]}
+          set -e
+          # steamcmd does not always return a non-zero exit code on failure
+          if [ "$code" -ne 0 ] || grep -Eq "ERROR|FAILED|Login Failure|Steam Guard|Invalid Password" "$WORK/steamcmd.log"; then
+            echo "::error::SteamCMD upload failed (exit $code). If the log mentions login or Steam Guard, regenerate STEAM_CONFIG_VDF."
+            exit 1
+          fi
+          id=$(tr -d '[:space:]' < About/PublishedFileId.txt)
+          echo "### Published to Steam Workshop" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://steamcommunity.com/sharedfiles/filedetails/?id=$id" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove Steam login
+        if: always()
+        run: rm -f "$HOME/Steam/config/config.vdf"
