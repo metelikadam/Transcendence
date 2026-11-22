@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <Transcendence_Beyond>Aşkın +{0}</Transcendence_Beyond>
+  <Transcendence_XpDifficulty>21-40 seviyeleri için XP zorluğu: {0}x</Transcendence_XpDifficulty>
+  <Transcendence_XpDifficultyDesc>20'nin üzerindeki her seviye için gereken XP'yi çarpar. 1x'te 20'den 40'a çıkmak yaklaşık 1,9 milyon XP ister.</Transcendence_XpDifficultyDesc>
+  <Transcendence_EffectStrength>21-40 seviyelerinin etki gücü: {0}x</Transcendence_EffectStrength>
+  <Transcendence_EffectStrengthDesc>20'nin üzerindeki her seviyenin, vanilla'nın son seviyelerine (15-20) göre ne kadar güçlü olduğu.</Transcendence_EffectStrengthDesc>
+  <Transcendence_Reset>Varsayılanlara dön</Transcendence_Reset>
+
+  <!-- Vanilla Skills Expanded: yetenek başına uzmanlık hakları -->
+  <Transcendence_ExpertiseNextAt>Haklar dolu {0}/{1} (sonraki: {2}. seviye)</Transcendence_ExpertiseNextAt>
+  <Transcendence_ExpertiseAllUsed>Tüm haklar kullanıldı ({0}/{1})</Transcendence_ExpertiseAllUsed>
+  <Transcendence_ExpertiseDesc>Bir uzmanlık seçmek, kolonistinin geliştireceği yeni bir yetenek açar ve ona güçlü ama çok özel bonuslar verir.\nHer yetenek ilk uzmanlık hakkını minimum uzmanlık seviyesinde (varsayılan 15) verir, ardından her 5 seviyede bir yeni hak gelir (en fazla 6). Haklar yalnızca o yeteneğin uzmanlıklarında ve yalnızca tutkulu olunan yeteneklerde kullanılabilir.</Transcendence_ExpertiseDesc>
+</LanguageData>

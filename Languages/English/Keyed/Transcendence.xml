@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <Transcendence_Beyond>Transcendent +{0}</Transcendence_Beyond>
+  <Transcendence_XpDifficulty>XP difficulty for levels 21-40: {0}x</Transcendence_XpDifficulty>
+  <Transcendence_XpDifficultyDesc>Multiplies the XP needed for every level above 20. At 1x, going from 20 to 40 takes roughly 1.9 million XP.</Transcendence_XpDifficultyDesc>
+  <Transcendence_EffectStrength>Effect strength of levels 21-40: {0}x</Transcendence_EffectStrength>
+  <Transcendence_EffectStrengthDesc>How much stronger each level above 20 is compared with a late vanilla level (levels 15-20).</Transcendence_EffectStrengthDesc>
+  <Transcendence_Reset>Reset to defaults</Transcendence_Reset>
+
+  <!-- Vanilla Skills Expanded: per-skill expertise slots -->
+  <Transcendence_ExpertiseNextAt>Slots used {0}/{1} (next at {2})</Transcendence_ExpertiseNextAt>
+  <Transcendence_ExpertiseAllUsed>All slots used ({0}/{1})</Transcendence_ExpertiseAllUsed>
+  <Transcendence_ExpertiseDesc>Selecting an expertise will unlock a new skill that your pawn will level up, granting them powerful, but very specific bonuses.\nEach skill grants its first expertise slot at the minimum expertise level (15 by default) and another slot every 5 levels after that, up to 6. Slots can only be used for that skill's expertises, and only in skills your pawn is passionate about.</Transcendence_ExpertiseDesc>
+</LanguageData>

@@ -1,0 +1,18 @@
+# Build artifacts
+Source/obj/
+Source/bin/
+*.pdb
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Note: 1.7/Assemblies/*.dll is committed on purpose so the repo can be
+# cloned straight into RimWorld's Mods folder and played without building.
