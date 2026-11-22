@@ -39,3 +39,6 @@ Source/         C# source and project
   Patches_Bills.cs        work bill skill range
   Compat_VSE.cs           Vanilla Skills Expanded / VEF compatibility
 ```
+
+## License
+[MIT](LICENSE). RimWorld and its assemblies belong to Ludeon Studios and are not included in this repository.
