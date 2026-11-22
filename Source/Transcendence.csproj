@@ -40,10 +40,15 @@
     </Reference>
   </ItemGroup>
 
-  <!-- Derlemeden sonra modu oyunun Mods klasörüne kopyala (Source ve obj hariç) -->
+  <!-- Derlemeden sonra modu oyunun Mods klasörüne kopyala.
+       Sadece oyunun kullandığı dosyalar gider; kaynak kod, git ve repo dosyaları Workshop'a yüklenmesin. -->
+  <PropertyGroup>
+    <ModRoot>$(MSBuildProjectDirectory)\..</ModRoot>
+  </PropertyGroup>
   <Target Name="DeployToGame" AfterTargets="Build">
     <ItemGroup>
-      <ModFiles Include="$(MSBuildProjectDirectory)\..\**\*" Exclude="$(MSBuildProjectDirectory)\..\Source\**" />
+      <ModFiles Include="$(ModRoot)\**\*"
+                Exclude="$(ModRoot)\Source\**;$(ModRoot)\.git\**;$(ModRoot)\.vs\**;$(ModRoot)\.idea\**;$(ModRoot)\.gitignore;$(ModRoot)\.gitattributes;$(ModRoot)\README.md" />
     </ItemGroup>
     <Copy SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(RimWorldDir)\Mods\Transcendence\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
