@@ -15,6 +15,7 @@ A RimWorld 1.7 mod that raises the skill cap from 20 to 40.
 | Mad Skills+ | Mad Skills+ handles decay, so there is no double decay. |
 | Vanilla Expanded Framework | Gene forget multipliers apply above 20. |
 | Mines (and any workbench) | Bill skill range raised to 0-40, with existing saves migrated once. |
+| EdB Prepare Carefully, Character Editor | Player-edited pawns can be set to 0-40. Game-generated pawns still start at 20 at most. |
 
 Requires [Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077).
 
@@ -39,6 +40,7 @@ Source/         C# source and project
   Patches_UI.cs           skill bar and tooltip
   Patches_Bills.cs        work bill skill range
   Compat_VSE.cs           Vanilla Skills Expanded / VEF compatibility
+  Compat_PawnEditors.cs   Prepare Carefully / Character Editor
 ```
 
 ## License
