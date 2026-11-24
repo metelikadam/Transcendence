@@ -78,8 +78,6 @@ namespace Transcendence
             "EdB.PrepareCarefully.PawnCustomizer:ApplySkillCustomizationsToPawn", // ön ayar yükleme ve oyunu başlatma
             // Character Editor
             "CharacterEditor.SkillTool:AddSkill",
-            // Pawn Studio
-            "PawnStudio.Logic.SkillWriter:SetLevel",
         };
 
         static List<MethodBase> found;
