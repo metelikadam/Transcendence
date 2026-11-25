@@ -25,6 +25,8 @@ Compatibility:
 - Vanilla Expanded Framework: gene forget multipliers apply above 20
 - EdB Prepare Carefully / Character Editor: your own pawns can be set up to level 40, while game-generated pawns still start at 20 at most
 
+Incompatible with Endless Growth (both mods change the skill cap).
+
 Requires Harmony.</description>
   <modDependencies>
     <li>
@@ -39,4 +41,8 @@ Requires Harmony.</description>
     <li>vanillaexpanded.skills</li>
     <li>cedaro.MadSkillsPlus</li>
   </loadAfter>
+  <!-- Both mods rewrite the same SkillRecord / quality / bill code paths. -->
+  <incompatibleWith>
+    <li>SlimeSenpai.EndlessGrowth</li>
+  </incompatibleWith>
 </ModMetaData>
