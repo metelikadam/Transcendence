@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -154,40 +156,37 @@ namespace Transcendence
     }
 
     /// <summary>
-    /// VSE.Expertise.ExpertiseDef.CanApplyOn(Pawn, out string reason) yaması.
-    ///
-    /// Prefix  : VSE'nin toplam sınırını (MaxExpertise) ve "aynı yetenekte tek uzmanlık" ayarını
-    ///           SADECE bu çağrı süresince bellekte devre dışı bırakır.
-    /// Postfix : VSE'nin diğer kontrolleri geçtiyse (tutku var, seviye yeterli) yetenek başına hak kuralını uygular.
-    /// Finalizer: hata olsa bile VSE ayarlarını eski değerlerine geri yükler.
-    /// Böylece VSE'nin kendi mantığını kopyalamadan, sadece "kaç tane" kuralını değiştirmiş oluyoruz.
+    /// VSE uzmanlık sistemine yansıma (reflection) ile erişim. VSE.dll'e derleme zamanında bağlı değiliz.
+    /// Hem VSE'nin kendi paneli hem de onu kendi arayüzüyle çizen modlar (Modern Bio Tab) bunu kullanır.
     /// </summary>
-    [HarmonyPatch]
-    public static class Patch_VSE_ExpertiseDef_CanApplyOn
+    internal static class VseExpertise
     {
+        static bool? ready;
+
+        static Type defType;
         static FieldInfo settingsField;      // VSE.SkillsMod.Settings (static)
         static FieldInfo maxExpertiseField;  // SkillsModSettings.MaxExpertise
         static FieldInfo allowOverlapField;  // SkillsModSettings.AllowExpertiseOverlap
         static FieldInfo minLevelField;      // SkillsModSettings.LevelToGetExpertise
         static FieldInfo defSkillField;      // ExpertiseDef.skill
+        static FieldInfo defHideField;       // ExpertiseDef.hide
         static FieldInfo recordDefField;     // ExpertiseRecord.def
         static PropertyInfo allExpertiseProp;// ExpertiseTracker.AllExpertise
         static MethodInfo expertiseOfPawn;   // ExpertiseTrackers.Expertise(this Pawn)
+        static MethodInfo passionToDef;      // PassionManager.PassionToDef(Passion)
+        static FieldInfo passionIsBadField;  // PassionDef.isBad
 
-        public struct SavedSettings
-        {
-            public object settings;
-            public int maxExpertise;
-            public bool allowOverlap;
-        }
+        static Dictionary<SkillDef, int> selectableDefsPerSkill;
 
-        static bool Prepare()
+        public static bool Ready => ready ??= Init();
+
+        static bool Init()
         {
             if (!VSECompat.Active)
             {
                 return false;
             }
-            Type defType = AccessTools.TypeByName("VSE.Expertise.ExpertiseDef");
+            defType = AccessTools.TypeByName("VSE.Expertise.ExpertiseDef");
             Type settingsType = AccessTools.TypeByName("VSE.SkillsModSettings");
             Type recordType = AccessTools.TypeByName("VSE.ExpertiseRecord");
             Type trackerType = AccessTools.TypeByName("VSE.ExpertiseTracker");
@@ -202,9 +201,13 @@ namespace Transcendence
             allowOverlapField = AccessTools.Field(settingsType, "AllowExpertiseOverlap");
             minLevelField = AccessTools.Field(settingsType, "LevelToGetExpertise");
             defSkillField = AccessTools.Field(defType, "skill");
+            defHideField = AccessTools.Field(defType, "hide");
             recordDefField = AccessTools.Field(recordType, "def");
             allExpertiseProp = AccessTools.Property(trackerType, "AllExpertise");
             expertiseOfPawn = AccessTools.Method(trackersType, "Expertise", new[] { typeof(Pawn) });
+            passionToDef = AccessTools.Method("VSE.Passions.PassionManager:PassionToDef", new[] { typeof(Passion) });
+            Type passionDefType = AccessTools.TypeByName("VSE.Passions.PassionDef");
+            passionIsBadField = passionDefType != null ? AccessTools.Field(passionDefType, "isBad") : null;
 
             bool ok = settingsField != null && maxExpertiseField != null && allowOverlapField != null && minLevelField != null
                       && defSkillField != null && recordDefField != null && allExpertiseProp != null && expertiseOfPawn != null;
@@ -215,22 +218,164 @@ namespace Transcendence
             return ok;
         }
 
+        // ---- VSE ayarları (sadece bellekte, geçici) ----
+        public static object Settings => settingsField.GetValue(null);
+        public static int GetMaxExpertise(object settings) => (int)maxExpertiseField.GetValue(settings);
+        public static bool GetAllowOverlap(object settings) => (bool)allowOverlapField.GetValue(settings);
+        public static void SetMaxExpertise(object settings, int value) => maxExpertiseField.SetValue(settings, value);
+        public static void SetAllowOverlap(object settings, bool value) => allowOverlapField.SetValue(settings, value);
+
+        /// <summary>İlk hakkın açıldığı seviye = VSE'nin "uzmanlık için minimum seviye" ayarı (varsayılan 15).</summary>
+        public static int FirstSlotLevel
+        {
+            get
+            {
+                object settings = Settings;
+                return settings != null ? (int)minLevelField.GetValue(settings) : 15;
+            }
+        }
+
+        public static SkillDef SkillOf(object expertiseDef) => defSkillField.GetValue(expertiseDef) as SkillDef;
+
+        static System.Collections.IList ExpertiseList(Pawn pawn)
+        {
+            object tracker = pawn?.skills == null ? null : expertiseOfPawn.Invoke(null, new object[] { pawn });
+            return tracker == null ? null : allExpertiseProp.GetValue(tracker) as System.Collections.IList;
+        }
+
+        public static int CountExpertiseIn(Pawn pawn, SkillDef skill)
+        {
+            var list = ExpertiseList(pawn);
+            if (list == null)
+            {
+                return 0;
+            }
+            int count = 0;
+            foreach (object rec in list)
+            {
+                object def = rec == null ? null : recordDefField.GetValue(rec);
+                if (def != null && defSkillField.GetValue(def) == (object)skill)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public static int CountAll(Pawn pawn) => ExpertiseList(pawn)?.Count ?? 0;
+
+        /// <summary>VSE'de "kötü" tutkular (tutkusuz, ilgisizlik...) uzmanlık açmaz.</summary>
+        static bool IsBadPassion(Passion passion)
+        {
+            if (passionToDef == null || passionIsBadField == null)
+            {
+                return passion == Passion.None;
+            }
+            object def = passionToDef.Invoke(null, new object[] { passion });
+            return def != null && (bool)passionIsBadField.GetValue(def);
+        }
+
+        /// <summary>Bir yetenekte seçilebilir (gizli olmayan) uzmanlık sayısı.</summary>
+        static int SelectableDefsFor(SkillDef skill)
+        {
+            if (selectableDefsPerSkill == null)
+            {
+                var counts = new Dictionary<SkillDef, int>();
+                PropertyInfo all = typeof(DefDatabase<>).MakeGenericType(defType)
+                    .GetProperty("AllDefsListForReading", BindingFlags.Public | BindingFlags.Static);
+                if (all?.GetValue(null) is System.Collections.IList defs)
+                {
+                    foreach (object def in defs)
+                    {
+                        if (def == null || (defHideField != null && (bool)defHideField.GetValue(def)))
+                        {
+                            continue;
+                        }
+                        if (SkillOf(def) is SkillDef s)
+                        {
+                            counts[s] = counts.TryGetValue(s, out int c) ? c + 1 : 1;
+                        }
+                    }
+                }
+                selectableDefsPerSkill = counts;
+            }
+            return selectableDefsPerSkill.TryGetValue(skill, out int n) ? n : 0;
+        }
+
+        /// <summary>
+        /// Pawn'ın kullanılmamış uzmanlık hakları (tüm yeteneklerin toplamı).
+        /// Her yetenek: açılan haklar - kullanılanlar; tutkusuz/devre dışı yetenekler ve seçilecek uzmanlığı kalmamış yetenekler sayılmaz.
+        /// </summary>
+        public static int FreeSlots(Pawn pawn)
+        {
+            if (pawn?.skills?.skills == null)
+            {
+                return 0;
+            }
+            int first = FirstSlotLevel;
+            int free = 0;
+            foreach (SkillRecord record in pawn.skills.skills)
+            {
+                if (record?.def == null || record.TotallyDisabled || IsBadPassion(record.passion))
+                {
+                    continue;
+                }
+                int slots = ExpertiseSlots.SlotsFor(record.Level, first);
+                if (slots <= 0)
+                {
+                    continue;
+                }
+                int used = CountExpertiseIn(pawn, record.def);
+                int left = Math.Min(slots - used, SelectableDefsFor(record.def) - used);
+                if (left > 0)
+                {
+                    free += left;
+                }
+            }
+            return free;
+        }
+
+        /// <summary>Kullanılan + kullanılmamış haklar: bu pawn için "en fazla uzmanlık".</summary>
+        public static int TotalSlots(Pawn pawn) => CountAll(pawn) + FreeSlots(pawn);
+    }
+
+    /// <summary>
+    /// VSE.Expertise.ExpertiseDef.CanApplyOn(Pawn, out string reason) yaması.
+    ///
+    /// Prefix  : VSE'nin toplam sınırını (MaxExpertise) ve "aynı yetenekte tek uzmanlık" ayarını
+    ///           SADECE bu çağrı süresince bellekte devre dışı bırakır.
+    /// Postfix : VSE'nin diğer kontrolleri geçtiyse (tutku var, seviye yeterli) yetenek başına hak kuralını uygular.
+    /// Finalizer: hata olsa bile VSE ayarlarını eski değerlerine geri yükler.
+    /// Böylece VSE'nin kendi mantığını kopyalamadan, sadece "kaç tane" kuralını değiştirmiş oluyoruz.
+    /// </summary>
+    [HarmonyPatch]
+    public static class Patch_VSE_ExpertiseDef_CanApplyOn
+    {
+        public struct SavedSettings
+        {
+            public object settings;
+            public int maxExpertise;
+            public bool allowOverlap;
+        }
+
+        static bool Prepare() => VseExpertise.Ready;
+
         static MethodBase TargetMethod() => AccessTools.Method("VSE.Expertise.ExpertiseDef:CanApplyOn");
 
         static void Prefix(out SavedSettings __state)
         {
             __state = default;
-            object settings = settingsField.GetValue(null);
+            object settings = VseExpertise.Settings;
             if (settings == null)
             {
                 return;
             }
             __state.settings = settings;
-            __state.maxExpertise = (int)maxExpertiseField.GetValue(settings);
-            __state.allowOverlap = (bool)allowOverlapField.GetValue(settings);
+            __state.maxExpertise = VseExpertise.GetMaxExpertise(settings);
+            __state.allowOverlap = VseExpertise.GetAllowOverlap(settings);
 
-            maxExpertiseField.SetValue(settings, int.MaxValue); // toplam sınır yok
-            allowOverlapField.SetValue(settings, true);          // aynı yetenekte birden fazla uzmanlık serbest
+            VseExpertise.SetMaxExpertise(settings, int.MaxValue); // toplam sınır yok
+            VseExpertise.SetAllowOverlap(settings, true);          // aynı yetenekte birden fazla uzmanlık serbest
         }
 
         static void Postfix(object __instance, Pawn pawn, ref bool __result, ref string reason, SavedSettings __state)
@@ -239,15 +384,15 @@ namespace Transcendence
             {
                 return; // VSE kendi sebebiyle reddetti (tutku yok, seviye düşük...) -> olduğu gibi bırak
             }
-            var skill = (SkillDef)defSkillField.GetValue(__instance);
-            SkillRecord record = pawn?.skills?.GetSkill(skill);
+            SkillDef skill = VseExpertise.SkillOf(__instance);
+            SkillRecord record = skill == null ? null : pawn?.skills?.GetSkill(skill);
             if (record == null)
             {
                 return;
             }
-            int firstSlotLevel = (int)minLevelField.GetValue(__state.settings);
+            int firstSlotLevel = VseExpertise.FirstSlotLevel;
             int slots = ExpertiseSlots.SlotsFor(record.Level, firstSlotLevel);
-            int used = CountExpertiseIn(pawn, skill);
+            int used = VseExpertise.CountExpertiseIn(pawn, skill);
             if (used < slots)
             {
                 return; // boş hak var
@@ -266,27 +411,99 @@ namespace Transcendence
             {
                 return;
             }
-            maxExpertiseField.SetValue(__state.settings, __state.maxExpertise);
-            allowOverlapField.SetValue(__state.settings, __state.allowOverlap);
+            VseExpertise.SetMaxExpertise(__state.settings, __state.maxExpertise);
+            VseExpertise.SetAllowOverlap(__state.settings, __state.allowOverlap);
+        }
+    }
+
+    // =====================================================================
+    //  Modern Bio Tab (astryl.ModernBioTab)
+    //
+    //  Karakter sekmesini kendi arayüzüyle çiziyor ve VSE uzmanlıkları için kendi seçicisini kullanıyor.
+    //  Hangi uzmanlığın seçilebileceğini VSE'nin CanApplyOn'una soruyor (bizim kuralımız orada çalışır),
+    //  ama "kaç tane seçilebilir" sorusunu VSE'nin MaxExpertise ayarını DOĞRUDAN okuyarak cevaplıyor:
+    //    - PicksFree(pawn)            = MaxExpertise - mevcut      -> 0 ise seçim düğmeleri hiç çıkmaz
+    //    - DrawSkillsColumn            : mevcut < MaxExpertise     -> uzmanlık bölümünü açar
+    //    - DrawExpertisePicks          : "{0} of {1} picks left"   -> etiket
+    //  Bu yüzden ilk uzmanlıktan sonra seçim kapanıyordu. Bu üç noktayı yetenek başına haklara bağlıyoruz.
+    // =====================================================================
+
+    /// <summary>Kalan seçim hakkı = yetenek başına kullanılmamış hakların toplamı.</summary>
+    [HarmonyPatch]
+    public static class Patch_ModernBioTab_PicksFree
+    {
+        static MethodBase target;
+
+        static bool Prepare()
+        {
+            target ??= VseExpertise.Ready ? AccessTools.Method("ModernBioTab.BioTabDrawer:PicksFree", new[] { typeof(Pawn) }) : null;
+            return target != null;
         }
 
-        static int CountExpertiseIn(Pawn pawn, SkillDef skill)
+        static MethodBase TargetMethod() => target;
+
+        static void Postfix(Pawn pawn, ref int __result)
         {
-            object tracker = expertiseOfPawn.Invoke(null, new object[] { pawn });
-            if (tracker == null || allExpertiseProp.GetValue(tracker) is not System.Collections.IList list)
+            __result = VseExpertise.FreeSlots(pawn);
+        }
+    }
+
+    /// <summary>
+    /// DrawSkillsColumn ve DrawExpertisePicks içindeki VseMaxExpertise() çağrısını,
+    /// o pawn'ın toplam hakkını veren VseExpertise.TotalSlots(pawn) ile değiştirir.
+    /// </summary>
+    [HarmonyPatch]
+    public static class Patch_ModernBioTab_MaxExpertise
+    {
+        static MethodInfo vseMaxExpertise;
+        static readonly MethodInfo totalSlots = AccessTools.Method(typeof(VseExpertise), nameof(VseExpertise.TotalSlots));
+        static List<MethodBase> targets;
+
+        static bool Prepare()
+        {
+            if (targets == null)
             {
-                return 0;
-            }
-            int count = 0;
-            foreach (object rec in list)
-            {
-                object def = recordDefField.GetValue(rec);
-                if (def != null && defSkillField.GetValue(def) == skill)
+                targets = new List<MethodBase>();
+                Type drawer = VseExpertise.Ready ? AccessTools.TypeByName("ModernBioTab.BioTabDrawer") : null;
+                vseMaxExpertise = drawer == null ? null : AccessTools.Method(drawer, "VseMaxExpertise");
+                if (vseMaxExpertise != null)
                 {
-                    count++;
+                    foreach (string name in new[] { "DrawSkillsColumn", "DrawExpertisePicks" })
+                    {
+                        MethodInfo m = AccessTools.Method(drawer, name);
+                        if (m != null && m.GetParameters().Any(p => p.ParameterType == typeof(Pawn)))
+                        {
+                            targets.Add(m);
+                        }
+                    }
                 }
             }
-            return count;
+            return targets.Count > 0;
+        }
+
+        static IEnumerable<MethodBase> TargetMethods() => targets;
+
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+        {
+            ParameterInfo pawnParam = __originalMethod.GetParameters().First(p => p.ParameterType == typeof(Pawn));
+            int pawnArg = pawnParam.Position + (__originalMethod.IsStatic ? 0 : 1);
+            int count = 0;
+            foreach (CodeInstruction code in instructions)
+            {
+                if (code.Calls(vseMaxExpertise))
+                {
+                    // VseMaxExpertise()  ->  VseExpertise.TotalSlots(pawn)
+                    yield return CodeInstruction.LoadArgument(pawnArg).WithLabels(code.ExtractLabels());
+                    yield return new CodeInstruction(OpCodes.Call, totalSlots);
+                    count++;
+                    continue;
+                }
+                yield return code;
+            }
+            if (count != 1)
+            {
+                Log.Warning($"[Transcendence] Modern Bio Tab {__originalMethod.Name}: expected 1 VseMaxExpertise call, patched {count}.");
+            }
         }
     }
 

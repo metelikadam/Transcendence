@@ -3,7 +3,7 @@
   <packageId>metelikadam.Transcendence</packageId>
   <name>Transcendence: Skills Beyond 20</name>
   <author>metelikadam</author>
-  <modVersion IgnoreIfNoMatchingField="True">1.0.0</modVersion>
+  <modVersion IgnoreIfNoMatchingField="True">1.0.1</modVersion>
   <url>https://github.com/metelikadam/Transcendence</url>
   <supportedVersions>
     <li>1.7</li>
@@ -20,7 +20,7 @@ Features:
 - Configurable XP difficulty and effect strength in Mod Settings
 
 Compatibility:
-- Vanilla Skills Expanded: passion forget rates apply above 20, and every skill earns expertise slots at levels 15, 20, 25, 30, 35 and 40
+- Vanilla Skills Expanded: passion forget rates apply above 20, and every skill earns expertise slots at levels 15, 20, 25, 30, 35 and 40 (also in Modern Bio Tab's expertise picker)
 - Mad Skills+: decay is handled by Mad Skills+ with no double decay
 - Vanilla Expanded Framework: gene forget multipliers apply above 20
 - EdB Prepare Carefully / Character Editor: your own pawns can be set up to level 40, while game-generated pawns still start at 20 at most

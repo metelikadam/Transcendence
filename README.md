@@ -16,6 +16,7 @@ A RimWorld 1.7 mod that raises the skill cap from 20 to 40.
 | Vanilla Expanded Framework | Gene forget multipliers apply above 20. |
 | Mines (and any workbench) | Bill skill range raised to 0-40, with existing saves migrated once. |
 | EdB Prepare Carefully, Character Editor | Player-edited pawns can be set to 0-40. Game-generated pawns still start at 20 at most. |
+| Modern Bio Tab | Its expertise picker uses the per-skill VSE slots. |
 | Endless Growth | **Incompatible.** Both mods change the skill cap by patching the same methods. |
 
 Requires [Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077).
